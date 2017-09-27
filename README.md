@@ -42,7 +42,7 @@ optional arguments:
 The typical use-case is below
 
 ```bash
-curl -s -o pipeline-commander.py https://goo.gl/146MEQ
+curl -L -s -o pipeline-commander.py https://goo.gl/146MEQ
 python3 pipeline-commander.py \
   --server-url https://example.co \
   --project-id 11 \
@@ -69,7 +69,7 @@ Most continuous integration environments allow developers to specify secret vari
 ```bash
 export PRIVATE_TOKEN=AbcDefGhijkLmNopQrsT
 export TRIGGER_TOKEN=abcdef0123456789abcdef01234567
-curl -s -o pipeline-commander.py https://goo.gl/146MEQ
+curl -L -s -o pipeline-commander.py https://goo.gl/146MEQ
 python3 pipeline-commander.py \
   --server-url https://example.co \
   --project-id 11 \
