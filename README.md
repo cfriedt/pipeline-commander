@@ -40,7 +40,7 @@ optional arguments:
 The typical use-case is below
 
 ```bash
-curl -s -o pipeline-commander.py https://goo.gl/hWMLde
+curl -s -o pipeline-commander.py https://goo.gl/146MEQ
 python3 pipeline-commander.py \
 	--server-url https://example.co \
   --project-id 11 \
@@ -60,14 +60,14 @@ status: pending
 exit status was 0
 ```
 
-For those who would like to avoid explicitly stating secret variables, the private token can also be specified using the environment variable `PRIVATE_TOKEN`. Similarly, the trigger token can also be specified using the environment variable TRIGGER_TOKEN.
+For those who would like to avoid explicitly stating secret variables, the private token can also be specified using the environment variable `PRIVATE_TOKEN`. Similarly, the trigger token can also be specified using the environment variable `TRIGGER_TOKEN`.
 
 Most continuous integration environments allow developers to specify secret variables that are cryptographically stored and sanitized in log files, but a trivial example of using environment variables is below.
 
 ```bash
 export PRIVATE_TOKEN=AbcDefGhijkLmNopQrsT
 export TRIGGER_TOKEN=abcdef0123456789abcdef01234567
-curl -s -o pipeline-commander.py https://goo.gl/hWMLde
+curl -s -o pipeline-commander.py https://goo.gl/146MEQ
 python3 pipeline-commander.py \
 	--server-url https://example.co \
   --project-id 11 \
