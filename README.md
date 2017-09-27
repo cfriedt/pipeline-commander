@@ -1,6 +1,8 @@
 # pipeline-commander
 A hackish tool to trigger a [GitLab](https://gitlab.com) pipeline and wait for its completion.
 
+It's kind of like the poor man's version of [Multi-Project Pipelines](https://docs.gitlab.com/ee/ci/multi_project_pipeline_graphs.html) a feature just [released in GitLab 9.3](https://about.gitlab.com/2017/06/22/gitlab-9-3-released/).
+
 # Usage
 ```
 usage: pipeline-commander.py [-h] [-r GIT_REF] [-o TIMEOUT] [-i PROJECT_ID]
