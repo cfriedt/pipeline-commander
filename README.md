@@ -1,5 +1,5 @@
 # pipeline-commander
-A hackish tool to trigger a GitLab pipeline and wait for its completion.
+A hackish tool to trigger a [GitLab](https://gitlab.com) pipeline and wait for its completion.
 
 # Usage
 ```
