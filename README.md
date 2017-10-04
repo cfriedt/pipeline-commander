@@ -6,10 +6,20 @@ It's kind of like the poor man's version of the [Multi-Project Pipelines](https:
 # Usage
 ```
 usage: pipeline-commander.py [-h] [-r GIT_REF] [-o TIMEOUT] [-i PROJECT_ID]
-                             [-p PRIVATE_TOKEN] [-u SERVER_URL]
-                             [-t TRIGGER_TOKEN] [-v [VERBOSE]]
+                             [-n [NO_DEFAULT_ENV]] [-p PRIVATE_TOKEN]
+                             [-u SERVER_URL] [-s SSL_CERT] [-t TRIGGER_TOKEN]
+                             [-v [VERBOSE]]
+                             [variables [variables ...]]
 
 Trigger a GitLab Pipeline and wait for its completion
+
+positional arguments:
+  variables             Additional variables, of the format KEY=VALUE, to pass
+                        into the triggered pipeline. Defaults to all
+                        environment variables. Problematic variables may be
+                        stripped out. See
+                        https://docs.gitlab.com/ee/ci/triggers/#making-use-of-
+                        trigger-variables
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -20,14 +30,18 @@ optional arguments:
   -i PROJECT_ID, --project-id PROJECT_ID
                         Numerical Project ID (under Settings->General Project
                         Settings in GitLab
+  -n [NO_DEFAULT_ENV], --no-default-env [NO_DEFAULT_ENV]
+                        Do not inherit variables from the environment
   -p PRIVATE_TOKEN, --private-token PRIVATE_TOKEN
-                        A private or personal token authorized to query
+                        An private or personal token authorised to query
                         pipeline status. See
                         https://docs.gitlab.com/ee/api/README.html#private-
                         tokens. By default, this value is initialized with
                         PRIVATE_TOKEN environment variable.
   -u SERVER_URL, --server-url SERVER_URL
                         Server URL to use, e.g. http://localhost:80
+  -s SSL_CERT, --ssl-cert SSL_CERT
+                        PEM SSL certificate to use for HTTPS
   -t TRIGGER_TOKEN, --trigger-token TRIGGER_TOKEN
                         The trigger token for a pipeline. See
                         https://docs.gitlab.com/ee/ci/triggers. By default,
