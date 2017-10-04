@@ -21,7 +21,7 @@ optional arguments:
                         Numerical Project ID (under Settings->General Project
                         Settings in GitLab
   -p PRIVATE_TOKEN, --private-token PRIVATE_TOKEN
-                        An private or personal token authorised to query
+                        A private or personal token authorized to query
                         pipeline status. See
                         https://docs.gitlab.com/ee/api/README.html#private-
                         tokens. By default, this value is initialized with
