@@ -26,7 +26,7 @@ class pipeline_commander:
 	See https://docs.gitlab.com/ee/api/pipelines.html
 	"""
 
-	def __init__( self, server_url = 'http://localhost:80', git_ref = 'master', project_id = 0, verbose = False, private_token = None, trigger_token = None ):
+	def __init__( self, server_url = 'http://localhost:80', git_ref = 'master', project_id = 0, verbose = False, private_token = None, trigger_token = None, ssl_cert = False ):
 
 		# state variables
 		self.triggered = False
@@ -44,12 +44,17 @@ class pipeline_commander:
 			self.trigger_token = None
 			pass
 
+		self.variables = {}
+		self.evariables = self.filter_variables( os.environ.items() )
+		self.no_default_env = False
+
 		# fields
 		self.server_url = server_url
 		self.git_ref = git_ref
 		self.project_id = project_id
 		self.project_jsn = None
 		self.verbose = verbose
+		self.ssl_cert = ssl_cert
 
 		if private_token is not None:
 			self.private_token = private_token
@@ -63,17 +68,48 @@ class pipeline_commander:
 		if self.trigger_token is None:
 			ValueError( "Trigger Token was not specified" )
 
+	def filter_variables( self, in_vars ):
+
+		out_vars = {}
+		reserved_variable_names = [
+			# variables to do with this application or the GitLab API
+			'PRIVATE_TOKEN',
+			'TRIGER_TOKEN',
+			'token',
+			'ref',
+
+			# variables to do with common UNIX conventions
+			'PWD',
+			'HOME',
+			'PATH',
+			'USER'
+		]
+
+		for k,v in in_vars:
+			if k in reserved_variable_names:
+				continue
+			out_vars[ "variables[{0}]".format( k ) ] = v
+
+		return out_vars
 
 	def trigger( self ):
 
 		if self.triggered:
 			ValueError( 'Already triggered' )
 
-		payload = { 'token': ( None, self.trigger_token ), 'ref': ( None, self.git_ref ) }
+		payload = {}
+		# default to filtered environment
+		for k,v in self.evariables.items():
+			payload.update( { k: ( None, v ) } )
+		# command-line variables override the environment
+		for k,v in self.variables.items():
+			payload.update( { k: ( None, v ) } )
+		# finally add API-specific fields
+		payload.update( { 'token': ( None, self.trigger_token ), 'ref': ( None, self.git_ref ) } )
 		url = "{0}/api/v4/projects/{1}/trigger/pipeline".format( self.server_url, self.project_id )
 
 		self.v( "Triggering build for project {0}, ref {1}, via {2}".format( self.project_id, self.git_ref, self.server_url ) )
-		response = requests.post( url, files = payload )
+		response = requests.post( url, files = payload, verify = self.ssl_cert )
 
 		if not ( response.status_code == 200 or response.status_code == 201 ):
 			raise ValueError( response )
@@ -149,7 +185,7 @@ class pipeline_commander:
 
 			self.v( "Getting Project via URL {0}".format( url ) )
 
-			response = requests.get( url, headers = headers )
+			response = requests.get( url, headers = headers, verify = self.ssl_cert )
 
 			jsn = json.loads( response.text )
 			self.project_jsn = jsn
@@ -169,7 +205,7 @@ class pipeline_commander:
 
 		self.v( "Getting Status via URL {0}".format( url ) )
 
-		response = requests.get( url, headers = headers )
+		response = requests.get( url, headers = headers, verify = self.ssl_cert )
 
 		jsn = json.loads( response.text )
 
@@ -197,7 +233,7 @@ class pipeline_commander:
 				return 0
 
 			elif "failed" == status:
-				print( "\nError:\n{0}".format( status_jsn ) )
+				print( "\nError:\n{0}".format( status ) )
 				return 1
 
 			else:
@@ -209,6 +245,22 @@ class pipeline_commander:
 		if self.verbose:
 			print( arg )
 
+	def process_variables( self, list_vars ):
+
+		for var in list_vars:
+			idx = var.find( '=' )
+			if idx is None:
+				raise ValueError( "Poorly formatted variable argument '{0}'".format( var ) )
+			k = var[ : idx ]
+			if k == "":
+				raise ValueError( "Poorly formatted variable argument '{0}'".format( var ) )
+			k = "variables[{0}]".format( var[ : idx ] )
+			if len( var ) > idx:
+				v = var[ idx + 1 : ]
+			else:
+				v = ""
+			self.variables.update( { k: v } )
+
 if __name__ == '__main__':
 
 	ap = argparse.ArgumentParser( description = 'Trigger a GitLab Pipeline and wait for its completion' )
@@ -216,10 +268,15 @@ if __name__ == '__main__':
 	ap.add_argument( '-r', '--git-ref', help = 'Git reference, e.g. master' )
 	ap.add_argument( '-o', '--timeout', type = int, help = 'Timeout in seconds' )
 	ap.add_argument( '-i', '--project-id', type = int, help = 'Numerical Project ID (under Settings->General Project Settings in GitLab' )
+	ap.add_argument( '-n', '--no-default-env', type = str2bool, nargs = '?', const = True, help = 'Do not inherit variables from the environment' )
 	ap.add_argument( '-p', '--private-token', help = 'An private or personal token authorised to query pipeline status. See https://docs.gitlab.com/ee/api/README.html#private-tokens. By default, this value is initialized with PRIVATE_TOKEN environment variable.' )
 	ap.add_argument( '-u', '--server-url', help = 'Server URL to use, e.g. http://localhost:80' )
+	ap.add_argument( '-s', '--ssl-cert', help = 'PEM SSL certificate to use for HTTPS' )
 	ap.add_argument( '-t', '--trigger-token', help = 'The trigger token for a pipeline. See https://docs.gitlab.com/ee/ci/triggers. By default, this value is initialized with TRIGGER_TOKEN environment variable.' )
 	ap.add_argument( '-v', '--verbose', type = str2bool, nargs = '?', const = True, help = 'Print more verbose information' )
+
+	# we use positional arguments for any additional variables that may be passed in. Those additional variables must be converted into a dict (i.e. key-value pairs) with some further, manual parsing.
+	ap.add_argument('variables', nargs='*', help = 'Additional variables, of the format KEY=VALUE, to pass into the triggered pipeline. Defaults to all environment variables. Problematic variables may be stripped out. See https://docs.gitlab.com/ee/ci/triggers/#making-use-of-trigger-variables')
 
 	args = ap.parse_args()
 
@@ -228,7 +285,13 @@ if __name__ == '__main__':
 	for key in vars( args ):
 		val = getattr( args, key )
 		if val is not None:
-			setattr( pc, key, val )
+			if key == 'variables':
+				pc.process_variables( val )
+			else:
+				setattr( pc, key, val )
+
+	if pc.no_default_env:
+		pc.evariables = {}
 
 	pc.get_project_info()
 
