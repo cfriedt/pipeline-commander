@@ -109,7 +109,7 @@ class pipeline_commander:
 		url = "{0}/api/v4/projects/{1}/trigger/pipeline".format( self.server_url, self.project_id )
 
 		self.v( "Triggering build for project {0}, ref {1}, via {2}".format( self.project_id, self.git_ref, self.server_url ) )
-		response = requests.post( url, files = payload, verify = self.ssl_cert )
+		response = requests.post( url, data = payload, verify = self.ssl_cert )
 
 		if not ( response.status_code == 200 or response.status_code == 201 ):
 			raise ValueError( response )
