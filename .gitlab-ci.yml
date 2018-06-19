@@ -5,8 +5,33 @@ variables:
 
 stages:
   - build
+  - test
+  - integrate
 
 build_job:
   stage: build
   script:
-    - echo 'success'
+    - cp pipeline-commander.py pipeline-commander
+    - chmod +x pipeline-commander
+  artifacts:
+    paths:
+      - pipeline-commander
+
+test_job:
+  stage: test
+  dependencies:
+    - build_job
+  script:
+    - echo "TODO: write some tests"
+
+integrate_job:
+  stage: integrate
+  dependencies:
+    - build_job
+  variables:
+    PRIVATE_TOKEN: this is not a valid token
+  script:
+    - cp pipeline-commander /usr/bin
+    - chmod +x /usr/bin/pipeline-commander
+    - pipeline-commander -p '${PRIVATE_TOKEN}' -u https://172.17.0.1 -r cfriedt/never-say-die -t ${CI_JOB_TOKEN} -i ${CI_PROJECT_ID}; test $? -eq 0
+    - pipeline-commander -p '${PRIVATE_TOKEN}' -u https://172.17.0.1 -r cfriedt/failing-forward -t ${CI_JOB_TOKEN} -i ${CI_PROJECT_ID}; test $? -ne 0
