@@ -22,7 +22,7 @@ test_job:
   dependencies:
     - build_job
   script:
-    - echo "TODO: write some tests"
+    - echo "need to write some tests"
 
 integrate_job:
   stage: integrate
