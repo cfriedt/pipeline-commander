@@ -33,5 +33,7 @@ integrate_job:
   script:
     - cp pipeline-commander /usr/bin
     - chmod +x /usr/bin/pipeline-commander
+    - echo triggering 'never-say-die' branch build which should always return success
     - pipeline-commander -p '${PRIVATE_TOKEN}' -u https://172.17.0.1 -r cfriedt/never-say-die -t ${CI_JOB_TOKEN} -i ${CI_PROJECT_ID}; test $? -eq 0
+    - echo triggering 'failing-forward' branch build which should always return failure
     - pipeline-commander -p '${PRIVATE_TOKEN}' -u https://172.17.0.1 -r cfriedt/failing-forward -t ${CI_JOB_TOKEN} -i ${CI_PROJECT_ID}; test $? -ne 0
