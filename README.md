@@ -5,50 +5,62 @@ It's kind of like the poor man's version of the [Multi-Project Pipelines](https:
 
 # Usage
 ```
-usage: pipeline-commander.py [-h] [-r GIT_REF] [-o TIMEOUT] [-i PROJECT_ID]
-                             [-n [NO_DEFAULT_ENV]] [-p PRIVATE_TOKEN]
-                             [-u SERVER_URL] [-s SSL_CERT] [-t TRIGGER_TOKEN]
-                             [-v [VERBOSE]]
-                             [variables [variables ...]]
+usage: pipeline-commander [-h] [-c CONFIG] [-p PRIVATE_TOKEN] [-u SERVER_URL]
+                          [-v] [-V]
+                          {projects,pipelines} ...
 
-Trigger a GitLab Pipeline and wait for its completion
+pipeline-commander: A hackish tool to query and manipulate GitLab
+pipelines_list
 
 positional arguments:
-  variables             Additional variables, of the format KEY=VALUE, to pass
-                        into the triggered pipeline. Defaults to all
-                        environment variables. Problematic variables may be
-                        stripped out. See
-                        https://docs.gitlab.com/ee/ci/triggers/#making-use-of-
-                        trigger-variables
+  {projects,pipelines}  sub-command help
 
 optional arguments:
   -h, --help            show this help message and exit
-  -r GIT_REF, --git-ref GIT_REF
-                        Git reference, e.g. master
-  -o TIMEOUT, --timeout TIMEOUT
-                        Timeout in seconds
-  -i PROJECT_ID, --project-id PROJECT_ID
-                        Numerical Project ID (under Settings->General Project
-                        Settings in GitLab
-  -n [NO_DEFAULT_ENV], --no-default-env [NO_DEFAULT_ENV]
-                        Do not inherit variables from the environment
+  -c CONFIG, --config CONFIG
+                        Path to configuration file
   -p PRIVATE_TOKEN, --private-token PRIVATE_TOKEN
-                        An private or personal token authorised to query
-                        pipeline status. See
-                        https://docs.gitlab.com/ee/api/README.html#private-
-                        tokens. By default, this value is initialized with
-                        PRIVATE_TOKEN environment variable.
+                        GitLab private token
   -u SERVER_URL, --server-url SERVER_URL
-                        Server URL to use, e.g. http://localhost:80
-  -s SSL_CERT, --ssl-cert SSL_CERT
-                        PEM SSL certificate to use for HTTPS
-  -t TRIGGER_TOKEN, --trigger-token TRIGGER_TOKEN
-                        The trigger token for a pipeline. See
-                        https://docs.gitlab.com/ee/ci/triggers. By default,
-                        this value is initialized with TRIGGER_TOKEN
-                        environment variable.
-  -v [VERBOSE], --verbose [VERBOSE]
-                        Print more verbose information
+                        Base server URL. E.g. https://172.17.0.1
+  -v, --verbose         Increase verbosity of messages
+  -V, --version         Show the version of pipeline-commander and exit
+
+```
+
+# List Projects
+
+```
+usage: pipeline-commander projects [-h] [-i ID]
+
+optional arguments:
+  -h, --help      show this help message and exit
+  -i ID, --id ID  the id of the individual project to list
+```
+
+# List, Create, and Cancel Pipelines
+
+```
+usage: pipeline-commander pipelines [-h] -i PROJECT_ID [-l PIPELINE_ID]
+                                    [-r GIT_REF]
+                                    [-v [VARIABLE [VARIABLE ...]]] [-w]
+                                    {list,create,cancel}
+
+positional arguments:
+  {list,create,cancel}
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -i PROJECT_ID, --project-id PROJECT_ID
+                        the project id
+  -l PIPELINE_ID, --pipeline-id PIPELINE_ID
+                        the pipeline id
+  -r GIT_REF, --git-ref GIT_REF
+                        the git reference
+  -v [VARIABLE [VARIABLE ...]], --variable [VARIABLE [VARIABLE ...]]
+                        one or more variables in key=value format
+  -w, --wait            wait for completion and adjust return value
+                        accordingly
 ```
 
 # Example
