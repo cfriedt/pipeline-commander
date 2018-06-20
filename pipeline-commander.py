@@ -55,6 +55,7 @@ class api_v4( object ):
         self._headers = { 'private-token': private_token }
         self._url = url + "/api/v4"
         self._verbose = False
+        self._skip_ssl_verification = False
 
     def V( self, *args, **kwargs ):
         if self._verbose:
@@ -63,9 +64,15 @@ class api_v4( object ):
     def set_verbosity( self, verbose ):
         self._verbose = verbose
 
+	def skip_ssl_verification( self ):
+		self._skip_ssl_verification = True
+
     def _get( self, url ):
         self.V( "GET APIv4 url '{0}'".format( url ) )
-        response = requests.get( url, headers = self._headers )
+        if self._skip_ssl_verification:
+            response = requests.get( url, headers = self._headers, verify = False )
+        else:
+        	response = requests.get( url, headers = self._headers )
         if response.status_code not in ( 200, 201 ):
             raise ValueError( response )
         jsn = json.loads( response.text )
@@ -75,7 +82,10 @@ class api_v4( object ):
 
     def _post( self, url, data ):
         self.V( "POST APIv4 url '{0}'".format( url ) )
-        response = requests.post( url, headers = self._headers, data = data )
+		if self._skip_ssl_verification:
+			response = requests.post( url, headers = self._headers, data = data, verify = False )
+		else:
+			response = requests.post( url, headers = self._headers, data = data )
         if response.status_code not in ( 200, 201 ):
             raise ValueError( response )
         jsn = json.loads( response.text )
@@ -157,6 +167,7 @@ class pipeline_commander( object ):
         parser_main.add_argument( '-u', '--server-url', help = 'Base server URL. E.g. https://172.17.0.1' )
         parser_main.add_argument( '-v', '--verbose', action = 'store_true', default = False, help = 'Increase verbosity of messages' )
         parser_main.add_argument( '-V', '--version', action = 'store_true', default = False, help = "Show the version of {0} and exit".format( PROGNAME ) )
+        parser_main.add_argument( '-k', '--skip-ssl-verification', help = 'Skip SSL verification', default = False, action = 'store_const', const = True )
 
         subparsers = parser_main.add_subparsers( help = 'sub-command help' )
 
@@ -259,6 +270,8 @@ class pipeline_commander( object ):
 
         self._api = api_v4( getattr( self, 'server_url' ), getattr( self, 'private_token' ) )
         self._api.set_verbosity( getattr( self, 'verbose' ) )
+        if getattr( self, 'skip_ssl_verification' ):
+         self._api.skip_ssl_verification()
 
         sys.exit( args.func( args ) )
 
