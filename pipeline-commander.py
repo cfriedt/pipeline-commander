@@ -1,299 +1,366 @@
 #!/usr/bin/env python3
 
 import argparse
+import errno
 import json
 import os
 import pprint
 import requests
+import signal
 import sys
 import time
+import yaml
+
+# global constants
+PROGNAME = 'pipeline-commander'
+HOME = os.path.expanduser( '~' )
+DEFAULT_CONFIG = os.path.join( HOME, '.config', PROGNAME + '.yml' )
+
+USAGE_STR="""
+{0}
+
+Notes:
+
+The '-p' option should be used with care, as GitLab private tokens can be used in
+place of stronger authentication mechanisms. Always use HTTPS to prevent this
+token from being transmitted in plaintext.
+
+Supported Commands:
+
+{1}
+"""
+
+# globals
+_sigint_received = False
+def sigint_handler( signal, frame ):
+    global _sigint_received
+    if not _sigint_received:
+        print( "caught signal {0} in frame {1}".format( signal, frame ) )
+        _sigint_received = True
 
 # https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
 def str2bool(v):
-	if v.lower() in ('yes', 'true', 't', 'y', '1'):
-		return True
-	elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-		return False
-	else:
-		raise argparse.ArgumentTypeError('Boolean value expected.')
-
-class pipeline_commander:
-	"""
-	Pipeline Commander
-
-	A hackish tool to trigger a GitLab pipeline and wait for its completion.
-
-	See https://docs.gitlab.com/ee/api/pipelines.html
-	"""
-
-	def __init__( self, server_url = 'http://localhost:80', git_ref = 'master', project_id = 0, verbose = False, private_token = None, trigger_token = None, ssl_cert = False ):
-
-		# state variables
-		self.triggered = False
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+# the APIv4 class
+class api_v4( object ):
+
+    def __init__( self, url, private_token ):
 
-		# values that can be set in the environment
-		try:
-			self.private_token = os.environ[ 'PRIVATE_TOKEN' ]
-		except KeyError as e:
-			self.private_token = None
-			pass
+        self._headers = { 'private-token': private_token }
+        self._url = url + "/api/v4"
+        self._verbose = False
 
-		try:
-			self.trigger_token = os.environ[ 'TRIGGER_TOKEN' ]
-		except KeyError as e:
-			self.trigger_token = None
-			pass
+    def V( self, *args, **kwargs ):
+        if self._verbose:
+            print( *args, **kwargs )
 
-		self.variables = {}
-		self.evariables = self.filter_variables( os.environ.items() )
-		self.no_default_env = False
+    def set_verbosity( self, verbose ):
+        self._verbose = verbose
 
-		# fields
-		self.server_url = server_url
-		self.git_ref = git_ref
-		self.project_id = project_id
-		self.project_jsn = None
-		self.verbose = verbose
-		self.ssl_cert = ssl_cert
-
-		if private_token is not None:
-			self.private_token = private_token
-
-		if trigger_token is not None:
-			self.trigger_token = trigger_token
-
-		if self.private_token is None:
-			ValueError( "Private Token was not specified" )
-
-		if self.trigger_token is None:
-			ValueError( "Trigger Token was not specified" )
-
-	def filter_variables( self, in_vars ):
-
-		out_vars = {}
-		reserved_variable_names = [
-			# variables to do with this application or the GitLab API
-			'PRIVATE_TOKEN',
-			'TRIGER_TOKEN',
-			'token',
-			'ref',
-
-			# variables to do with common UNIX conventions
-			'PWD',
-			'HOME',
-			'PATH',
-			'USER'
-		]
-
-		for k,v in in_vars:
-			if k in reserved_variable_names:
-				continue
-			out_vars[ "variables[{0}]".format( k ) ] = v
-
-		return out_vars
-
-	def trigger( self ):
-
-		if self.triggered:
-			ValueError( 'Already triggered' )
-
-		payload = {}
-		# default to filtered environment
-		for k,v in self.evariables.items():
-			payload.update( { k: ( None, v ) } )
-		# command-line variables override the environment
-		for k,v in self.variables.items():
-			payload.update( { k: ( None, v ) } )
-		# finally add API-specific fields
-		payload.update( { 'token': ( None, self.trigger_token ), 'ref': ( None, self.git_ref ) } )
-		url = "{0}/api/v4/projects/{1}/trigger/pipeline".format( self.server_url, self.project_id )
-
-		self.v( "Triggering build for project {0}, ref {1}, via {2}".format( self.project_id, self.git_ref, self.server_url ) )
-		response = requests.post( url, data = payload, verify = self.ssl_cert )
-
-		if not ( response.status_code == 200 or response.status_code == 201 ):
-			raise ValueError( response )
-
-		self.triggered = True
-		jsn = json.loads( response.text )
-		self.build_jsn = jsn
-
-		self.v( "Trigger Response:\n{0}".format( pprint.pformat( jsn, indent = 4 ) ) )
-
-		print( '=' * 80 )
-		print( self.get_build_status_webpage() )
-		print( '=' * 80 )
-
-
-	def get_build_status_webpage( self ):
-
-		self.get_project_info()
-
-		url = "{0}/pipelines/{1}".format( self.project_jsn[ 'web_url' ], self.build_jsn[ 'id' ] )
-
-		return url
-
-
-	def get_build_url( self ):
-
-		if not self.triggered:
-			ValueError( 'Not triggered' )
-
-		url = "{0}/api/v4/projects/{1}/pipeline/{2}".format( self.server_url, self.project_id, self.build_jsn[ 'id' ] )
-
-		return url
-
-	def get_build_url( self ):
-
-		if not self.triggered:
-			ValueError( 'Not triggered' )
-
-		url = "{0}/api/v4/projects/{1}/pipeline/{2}".format( self.server_url, self.project_id, self.build_jsn[ 'id' ] )
-
-		return url
-
-
-	def get_jobs_url( self ):
-		"""
-		For some reason, the API call for getting the status for just one particular pipeline does not seem to be working right now,
-		so we just get all of the jobs and filter-out
-		"""
-
-		if not self.triggered:
-			ValueError( 'Not triggered' )
-
-		url = "{0}/api/v4/projects/{1}/pipelines".format( self.server_url, self.project_id )
-
-		return url
-
-	def get_projects_url( self, project_id = None ):
-
-		if project_id is None:
-			url = "{0}/api/v4/projects".format( self.server_url )
-		else:
-			url = "{0}/api/v4/projects/{1}".format( self.server_url, self.project_id )
-
-		return url
-
-	def get_project_info( self ):
-
-		if self.project_jsn is None:
-
-			headers = { 'PRIVATE-TOKEN': self.private_token }
-
-			url = self.get_projects_url( self.project_id )
-
-			self.v( "Getting Project via URL {0}".format( url ) )
-
-			response = requests.get( url, headers = headers, verify = self.ssl_cert )
-
-			jsn = json.loads( response.text )
-			self.project_jsn = jsn
-
-			self.v( "Project Info:\n{0}".format( pprint.pformat( jsn, indent = 4 ) ) )
-
-		return self.project_jsn
-
-	def get_status( self ):
-
-		if not self.triggered:
-			ValueError( 'Not triggered' )
-
-		headers = { 'PRIVATE-TOKEN': self.private_token }
-
-		url = self.get_jobs_url()
-
-		self.v( "Getting Status via URL {0}".format( url ) )
-
-		response = requests.get( url, headers = headers, verify = self.ssl_cert )
-
-		jsn = json.loads( response.text )
-
-		for e in jsn:
-			if e[ 'id' ] == self.build_jsn[ 'id' ]:
-				self.v( "Job Status:\n{0}".format( pprint.pformat( e, indent = 4 ) ) )
-				return e[ 'status' ]
-
-		raise ValueError( "Build ID {0} for Project ID {1} not found!".format( self.build_jsn[ 'id' ], self.project_id ) )
-
-
-	def wait_for( self ):
-
-		prev_status = ''
-
-		while True:
-
-			status = self.get_status()
-
-			if status != prev_status:
-				print( "status: {0}".format( status ) )
-				prev_status = status
-
-			if "success" == status:
-				return 0
-
-			elif "failed" == status:
-				print( "\nError:\n{0}".format( status ) )
-				return 1
-
-			else:
-				sys.stdout.write( '.' )
-				sys.stdout.flush()
-				time.sleep( 1 )
-
-	def v( self, arg ):
-		if self.verbose:
-			print( arg )
-
-	def process_variables( self, list_vars ):
-
-		for var in list_vars:
-			idx = var.find( '=' )
-			if idx is None:
-				raise ValueError( "Poorly formatted variable argument '{0}'".format( var ) )
-			k = var[ : idx ]
-			if k == "":
-				raise ValueError( "Poorly formatted variable argument '{0}'".format( var ) )
-			k = "variables[{0}]".format( var[ : idx ] )
-			if len( var ) > idx:
-				v = var[ idx + 1 : ]
-			else:
-				v = ""
-			self.variables.update( { k: v } )
+    def _get( self, url ):
+        self.V( "GET APIv4 url '{0}'".format( url ) )
+        response = requests.get( url, headers = self._headers )
+        if response.status_code not in ( 200, 201 ):
+            raise ValueError( response )
+        jsn = json.loads( response.text )
+        self.V( "Received JSN response:" )
+        self.V( pprint.pformat( jsn, indent = 4 ) )
+        return jsn
+
+    def _post( self, url, data ):
+        self.V( "POST APIv4 url '{0}'".format( url ) )
+        response = requests.post( url, headers = self._headers, data = data )
+        if response.status_code not in ( 200, 201 ):
+            raise ValueError( response )
+        jsn = json.loads( response.text )
+        self.V( "Received JSN response:" )
+        self.V( pprint.pformat( jsn, indent = 4 ) )
+        return jsn
+
+    #
+    # API commands
+    #
+
+    # List All Projects
+    # https://docs.gitlab.com/ee/api/projects.html#list-all-projects_list
+    # Get Single Project
+    # https://docs.gitlab.com/ee/api/projects.html#get-single-project
+    def projects_list( self, project_id = None ):
+
+        url = self._url + "/projects"
+        if project_id:
+            url += "/" + project_id
+
+        return self._get( url )
+
+    # List Project Pipelines
+    # https://docs.gitlab.com/ee/api/pipelines_list.html#list-project-pipelines_list
+    # Get a Single Pipeline
+    # https://docs.gitlab.com/ee/api/pipelines_list.html#get-a-single-pipeline
+    def pipelines_list( self, project_id, pipeline_id = None ):
+
+        url = self._url + "/projects/{}".format( project_id ) + "/pipelines"
+
+        if pipeline_id:
+            url += "/{}".format( pipeline_id )
+
+        return self._get( url )
+
+    # Create a New Pipeline
+    # https://docs.gitlab.com/ee/api/pipelines.html#create-a-new-pipeline
+    def pipelines_create( self, project_id, ref, variables = {} ):
+
+        url = self._url + "/projects/{}".format( project_id ) + "/pipeline"
+
+        data = {}
+        data.update( { 'ref': ( None, ref ) } )
+        for k,v in variables.items():
+            data.update( { k: ( None, v ) } )
+
+        return self._post( url, data )
+
+    # Cancel a Pipeline's Jobs
+    # https://docs.gitlab.com/ee/api/pipelines.html#cancel-a-pipelines-jobs
+    def pipelines_cancel( self, project_id, pipeline_id ):
+
+        url = self._url + "/projects/{}".format( project_id ) + "/pipelines/{}".format( pipeline_id ) + "/cancel"
+
+        return self._post( url, dict() )
+
+# the main class
+class pipeline_commander( object ):
+    """
+    Pipeline Commander
+
+    A hackish tool to query and manipulate GitLab pipelines_list.
+
+    See https://docs.gitlab.com/ee/api/pipelines_list.html
+    """
+
+    def __init__( self ):
+        if pipeline_commander._instance:
+            raise ValueError( 'This is a singleton class. Please use pipeline_commander.inst()' )
+
+        setattr( self, 'version', '0.1' )
+        setattr( self, 'verbose', False )
+
+        parser_main = argparse.ArgumentParser( description = "{0}: A hackish tool to query and manipulate GitLab pipelines_list".format( PROGNAME ) )
+
+        parser_main.add_argument( '-c', '--config', help = 'Path to configuration file' )
+        parser_main.add_argument( '-p', '--private-token', help = 'GitLab private token' )
+        parser_main.add_argument( '-u', '--server-url', help = 'Base server URL. E.g. https://172.17.0.1' )
+        parser_main.add_argument( '-v', '--verbose', action = 'store_true', default = False, help = 'Increase verbosity of messages' )
+        parser_main.add_argument( '-V', '--version', action = 'store_true', default = False, help = "Show the version of {0} and exit".format( PROGNAME ) )
+
+        subparsers = parser_main.add_subparsers( help = 'sub-command help' )
+
+        # projects command
+        parser_projects = subparsers.add_parser( 'projects' )
+        parser_projects.add_argument( '-i', '--id', help = 'the id of the individual project to list' )
+        parser_projects.set_defaults( func = projects )
+
+        # pipelines command
+        parser_pipelines = subparsers.add_parser( 'pipelines' )
+        parser_pipelines.add_argument( 'pipelines_cmd', choices = ( 'list', 'create', 'cancel' )  )
+        parser_pipelines.add_argument( '-i', '--project-id', help = 'the project id', required = True )
+        parser_pipelines.add_argument( '-l', '--pipeline-id', help = 'the pipeline id' )
+        parser_pipelines.add_argument( '-r', '--git-ref', help = 'the git reference' )
+        parser_pipelines.add_argument( '-v','--variable', nargs='*', help = 'one or more variables in key=value format' )
+        parser_pipelines.add_argument( '-w','--wait', help = 'wait for completion and adjust return value accordingly', default = False, action = 'store_const', const = True )
+        parser_pipelines.set_defaults( func = pipelines )
+
+        self.parser = parser_main
+
+    # sort-of singleton
+    _instance = None
+    def inst():
+        if not pipeline_commander._instance:
+            pipeline_commander._instance = pipeline_commander()
+        return pipeline_commander._instance
+    inst = staticmethod( inst )
+
+    def V( self, *args, **kwargs ):
+        if self.verbose:
+            print( *args, file=sys.stderr, **kwargs )
+
+    def E( self, *args, **kwargs ):
+        print( *args, file=sys.stderr, **kwargs )
+
+    def usage( self ):
+        commands = ""
+        for k,v in self.valid_commands.items():
+            commands += "{0}\t\t{1}\n".format( k, v )
+
+        usage_str = USAGE_STR.format(
+            self.ap.format_help(),
+            commands
+        )
+
+        print( usage_str )
+
+    def process_config( self, cfg_path = DEFAULT_CONFIG, must_exist = False ):
+
+        if not os.path.exists( cfg_path ):
+            self.V( "ignoring nonexistent path '{0}'".format( cfg_path ) )
+            return
+
+        try:
+            with open( cfg_path, 'r' ) as yamlcfg:
+                cfg = yaml.load( yamlcfg )
+                if cfg is not None:
+                    for k,v in cfg.items():
+                        self.V( "processing config option '{0}'='{1}'".format( k, v ) )
+                        setattr( self, k, v )
+        except IOError:
+            if must_exist:
+                raise
+            else:
+                pass
+
+    def process_arguments( self ):
+
+        if len( sys.argv ) is 0:
+            self.usage()
+            sys.exit( os.EX_OK )
+
+        args = self.parser.parse_args()
+
+        cfg = getattr( args, 'config' )
+        if cfg:
+            setattr( self, 'config', cfg )
+            self.process_config( cfg_path = cfg, must_exist = True )
+        else:
+            setattr( self, 'config', DEFAULT_CONFIG )
+
+        if getattr( args, 'version' ):
+            print( self.version )
+            sys.exit( os.EX_OK )
+
+        for key in vars( args ):
+            if 'config' is key:
+                continue
+            val = getattr( args, key )
+            if val is not None:
+                setattr( self, key, val )
+
+        if not hasattr( self, 'private_token' ):
+            self.E( "please add your private token to {0}".format( getattr( self, 'config' ) ) )
+            sys.exit( errno.EINVAL )
+
+        if not hasattr( self, 'server_url' ):
+            self.E( "No server-url argument specified" )
+            sys.exit( errno.EINVAL )
+
+        self._api = api_v4( getattr( self, 'server_url' ), getattr( self, 'private_token' ) )
+        self._api.set_verbosity( getattr( self, 'verbose' ) )
+
+        sys.exit( args.func( args ) )
+
+# commands
+def projects( *args ):
+    pc = pipeline_commander.inst()
+    jsn = pc._api.projects_list( getattr( pc, 'id', None ) )
+    for prj in jsn:
+        print(
+            "{0}\t{1}\t{2}".format(
+                prj[ 'id' ],
+                prj[ 'name' ],
+                prj[ 'web_url' ]
+            )
+        )
+
+def pipelines( *args ):
+    pc = pipeline_commander.inst()
+
+    if False:
+        pass
+    elif 'list' == getattr( pc, 'pipelines_cmd' ):
+        jsn = pc._api.pipelines_list( getattr( pc, 'project_id' ), getattr( pc, 'pipeline_id', None ) )
+
+        # when reading back a single id, it's a dict, not a list, so just convert it to a list to reuse code
+        if type( jsn ) is dict:
+            jsn = [ jsn ]
+
+        for ppl in jsn:
+            print(
+                "{0}\t{1}\t{2}\t{3}".format(
+                    ppl[ 'id' ],
+                    ppl[ 'ref' ],
+                    ppl[ 'sha' ],
+                    ppl[ 'status' ]
+                )
+            )
+
+    elif 'create' == getattr( pc, 'pipelines_cmd' ):
+
+        variables = {}
+        for kv in getattr( pc, 'variable', list() ):
+            pc.V( "Processing variable '{}'".format( kv ) )
+            if '=' not in kv:
+                raise ValueError( "variables are of the form KEY=VAL" )
+            kvlst = kv.split( '=' )
+            if 2 != len( kvlst ):
+                raise ValueError( "variables are of the form KEY=VAL" )
+            k = kvlst[ 0 ]
+            v = kvlst[ 1 ]
+            variables.update( { k: v } )
+
+        project_id = getattr( pc, 'project_id' )
+
+        jsn = pc._api.pipelines_create( project_id, getattr( pc, 'git_ref' ), variables )
+
+        pipeline_id = jsn[ 'id' ]
+
+        print( pipeline_id )
+
+        if getattr( pc, 'wait' ):
+            pc.V( "Waiting for pipeline {} to complete..".format( pipeline_id ) )
+
+            prev_status = ''
+            while True:
+
+                if _sigint_received:
+                    print( "received SIGINT - cancelling pipeline {}".format( pipeline_id ) )
+                    jsn = pc._api.pipelines_cancel( project_id, pipeline_id )
+                    return os.EX_OK
+
+                time.sleep( 1 )
+
+                # get status
+                jsn = pc._api.pipelines_list( project_id, pipeline_id )
+                status = jsn[ 'status' ]
+
+                if status != prev_status:
+                    print( "status: {}".format( status ) )
+                    prev_status = status
+                else:
+                    print( '.', end = '', flush = True )
+
+                if 'failed' == status:
+                    return os.EX_SOFTWARE
+
+                if 'success' == status:
+                    return os.EX_OK
+
+                if 'canceled' == status:
+                    print( "pipeline {} was cancelled externally".format( pipeline_id ) )
+                    return os.EX_OK
+
+    elif 'cancel' == getattr( pc, 'pipelines_cmd' ):
+        jsn = pc._api.pipelines_cancel( getattr( pc, 'project_id' ), getattr( pc, 'pipeline_id' ) )
 
 if __name__ == '__main__':
 
-	ap = argparse.ArgumentParser( description = 'Trigger a GitLab Pipeline and wait for its completion' )
+    signal.signal( signal.SIGINT, sigint_handler )
 
-	ap.add_argument( '-r', '--git-ref', help = 'Git reference, e.g. master' )
-	ap.add_argument( '-o', '--timeout', type = int, help = 'Timeout in seconds' )
-	ap.add_argument( '-i', '--project-id', type = int, help = 'Numerical Project ID (under Settings->General Project Settings in GitLab' )
-	ap.add_argument( '-n', '--no-default-env', type = str2bool, nargs = '?', const = True, help = 'Do not inherit variables from the environment' )
-	ap.add_argument( '-p', '--private-token', help = 'An private or personal token authorised to query pipeline status. See https://docs.gitlab.com/ee/api/README.html#private-tokens. By default, this value is initialized with PRIVATE_TOKEN environment variable.' )
-	ap.add_argument( '-u', '--server-url', help = 'Server URL to use, e.g. http://localhost:80' )
-	ap.add_argument( '-s', '--ssl-cert', help = 'PEM SSL certificate to use for HTTPS' )
-	ap.add_argument( '-t', '--trigger-token', help = 'The trigger token for a pipeline. See https://docs.gitlab.com/ee/ci/triggers. By default, this value is initialized with TRIGGER_TOKEN environment variable.' )
-	ap.add_argument( '-v', '--verbose', type = str2bool, nargs = '?', const = True, help = 'Print more verbose information' )
-
-	# we use positional arguments for any additional variables that may be passed in. Those additional variables must be converted into a dict (i.e. key-value pairs) with some further, manual parsing.
-	ap.add_argument('variables', nargs='*', help = 'Additional variables, of the format KEY=VALUE, to pass into the triggered pipeline. Defaults to all environment variables. Problematic variables may be stripped out. See https://docs.gitlab.com/ee/ci/triggers/#making-use-of-trigger-variables')
-
-	args = ap.parse_args()
-
-	pc = pipeline_commander()
-
-	for key in vars( args ):
-		val = getattr( args, key )
-		if val is not None:
-			if key == 'variables':
-				pc.process_variables( val )
-			else:
-				setattr( pc, key, val )
-
-	if pc.no_default_env:
-		pc.evariables = {}
-
-	pc.get_project_info()
-
-	pc.trigger()
-	exit( pc.wait_for() )
+    pc = pipeline_commander.inst()
+    # load configuration options stored in ~/.config/pipeline-commander.yml
+    pc.process_config()
+    # process command-line arguments, potentially specifying a different config file
+    pc.process_arguments()
