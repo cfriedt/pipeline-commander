@@ -64,15 +64,15 @@ class api_v4( object ):
     def set_verbosity( self, verbose ):
         self._verbose = verbose
 
-	def skip_ssl_verification( self ):
-		self._skip_ssl_verification = True
+    def skip_ssl_verification( self ):
+        self._skip_ssl_verification = True
 
     def _get( self, url ):
         self.V( "GET APIv4 url '{0}'".format( url ) )
         if self._skip_ssl_verification:
             response = requests.get( url, headers = self._headers, verify = False )
         else:
-        	response = requests.get( url, headers = self._headers )
+            response = requests.get( url, headers = self._headers )
         if response.status_code not in ( 200, 201 ):
             raise ValueError( response )
         jsn = json.loads( response.text )
@@ -82,10 +82,10 @@ class api_v4( object ):
 
     def _post( self, url, data ):
         self.V( "POST APIv4 url '{0}'".format( url ) )
-		if self._skip_ssl_verification:
-			response = requests.post( url, headers = self._headers, data = data, verify = False )
-		else:
-			response = requests.post( url, headers = self._headers, data = data )
+        if self._skip_ssl_verification:
+            response = requests.post( url, headers = self._headers, data = data, verify = False )
+        else:
+            response = requests.post( url, headers = self._headers, data = data )
         if response.status_code not in ( 200, 201 ):
             raise ValueError( response )
         jsn = json.loads( response.text )
