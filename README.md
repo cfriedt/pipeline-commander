@@ -5,9 +5,9 @@ It's kind of like the poor man's version of the [Multi-Project Pipelines](https:
 
 # Usage
 ```
-usage: pipeline-commander [-h] [-c CONFIG] [-p PRIVATE_TOKEN] [-u SERVER_URL]
-                          [-v] [-V]
-                          {projects,pipelines} ...
+usage: pipeline-commander.py [-h] [-c CONFIG] [-p PRIVATE_TOKEN]
+                             [-u SERVER_URL] [-v] [-V] [-k]
+                             {projects,pipelines} ...
 
 pipeline-commander: A hackish tool to query and manipulate GitLab
 pipelines_list
@@ -25,7 +25,8 @@ optional arguments:
                         Base server URL. E.g. https://172.17.0.1
   -v, --verbose         Increase verbosity of messages
   -V, --version         Show the version of pipeline-commander and exit
-
+  -k, --skip-ssl-verification
+                        Skip SSL verification
 ```
 
 # List Projects
