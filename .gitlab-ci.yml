@@ -29,7 +29,7 @@ test_job:
     - chmod +x /usr/bin/pipeline-commander
     - echo "need to write some tests"
 
-integrate_job:
+integrate_job_00:
   stage: integrate
   dependencies:
     - build_job
@@ -40,5 +40,15 @@ integrate_job:
     - chmod +x /usr/bin/pipeline-commander
     - echo running 'never-say-die' branch build which should always return success
     - pipeline-commander -k -p ${PRIVATE_TOKEN} -u https://172.17.0.1 pipelines create -r cfriedt/never-say-die -v CI_JOB_TOKEN=${CI_JOB_TOKEN} -i ${CI_PROJECT_ID} -w
+
+integrate_job_01:
+  stage: integrate
+  dependencies:
+    - build_job
+  variables:
+    PRIVATE_TOKEN: this is not a valid token
+  script:
+    - cp pipeline-commander /usr/bin
+    - chmod +x /usr/bin/pipeline-commander
     - echo running 'failing-forward' branch build which should always return failure
     - pipeline-commander -k -p ${PRIVATE_TOKEN} -u https://172.17.0.1 pipelines create -r cfriedt/failing-forward -v CI_JOB_TOKEN=${CI_JOB_TOKEN} -i ${CI_PROJECT_ID} -w && exit 1 || exit 0
