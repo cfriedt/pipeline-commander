@@ -70,43 +70,41 @@ The typical use-case is below
 ```bash
 curl -L -s -o pipeline-commander.py https://goo.gl/146MEQ
 python3 pipeline-commander.py \
+  pipeline create \
   --server-url https://example.co \
   --project-id 11 \
   --git-ref master \
-  --private-token AbcDefGhijkLmNopQrsT
-  --trigger-token abcdef0123456789abcdef01234567
+  --private-token AbcDefGhijkLmNopQrsT \
+  -w
 echo "exit status was $?"
 ```
 Output:
 ```
-================================================================================
-http://example.co/namespace/project-name/pipelines/42
-================================================================================
 status: pending
 ..status: running
 ...........status: success
 exit status was 0
 ```
 
-For those who would like to avoid explicitly stating secret variables, the private token can also be specified using the environment variable `PRIVATE_TOKEN`. Similarly, the trigger token can also be specified using the environment variable `TRIGGER_TOKEN`.
-
-Most continuous integration environments allow developers to specify secret variables that are cryptographically stored and sanitized in log files, but a trivial example of using environment variables is below.
+Most users would likely keep their private token in a secure configuration file.
 
 ```bash
-export PRIVATE_TOKEN=AbcDefGhijkLmNopQrsT
-export TRIGGER_TOKEN=abcdef0123456789abcdef01234567
+mkdir -p ~/.config
+set +o history
+echo "private_token: 'AbcDefGhijkLmNopQrsT'" > ~/.config/pipeline-commander.yml
+chmod go-rwx ~/.config/pipeline-commander.yml
+set -o history
 curl -L -s -o pipeline-commander.py https://goo.gl/146MEQ
 python3 pipeline-commander.py \
+  pipeline create \
   --server-url https://example.co \
   --project-id 11 \
-  --git-ref master
+  --git-ref master \
+  -w
 echo "exit status was $?"
 ```
 Output:
 ```
-================================================================================
-http://example.co/namespace/project-name/pipelines/42
-================================================================================
 status: pending
 ..status: running
 ...........status: success
