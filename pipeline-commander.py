@@ -83,9 +83,9 @@ class api_v4( object ):
     def _post( self, url, data ):
         self.V( "POST APIv4 url '{0}'".format( url ) )
         if self._skip_ssl_verification:
-            response = requests.post( url, headers = self._headers, data = data, verify = False )
+            response = requests.post( url, headers = self._headers, json = data, verify = False )
         else:
-            response = requests.post( url, headers = self._headers, data = data )
+            response = requests.post( url, headers = self._headers, json = data )
         if response.status_code not in ( 200, 201 ):
             raise ValueError( response )
         jsn = json.loads( response.text )
@@ -129,9 +129,13 @@ class api_v4( object ):
         url = self._url + "/projects/{}".format( project_id ) + "/pipeline"
 
         data = {}
-        data.update( { 'ref': ( None, ref ) } )
+        data.update( { 'ref': ref } )
+        variables_array = []
+        # Build array of variables in the required format. data needs to be passed as json
+        # https://stackoverflow.com/questions/47288184/trigger-gitlab-build-with-python-requests
         for k,v in variables.items():
-            data.update( { k: ( None, v ) } )
+            variables_array.append( {"key": k, "value": v} )
+        data.update( { 'variables': variables_array } )
 
         return self._post( url, data )
 
